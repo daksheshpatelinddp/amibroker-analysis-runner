@@ -1,0 +1,65 @@
+# One analysis job (Optimize or Walk-Forward) split over several machines. Started by the app (workflow_dispatch with the job id).
+# A run lasts at most about 6 hours; a job that needs longer saves its progress and the last step starts the next run by itself.
+name: analysis
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Job id (the folder jobs/<id>/ written by the app)'
+        required: true
+permissions:
+  contents: write
+  actions: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.p.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENGINE_REPO }}
+          token: ${{ secrets.ENGINE_TOKEN || github.token }}
+          path: engine
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: p
+        run: node --import ./src/register.mjs src/cli.mjs plan "${{ inputs.job }}"
+        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine }
+  shard:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENGINE_REPO }}
+          token: ${{ secrets.ENGINE_TOKEN || github.token }}
+          path: engine
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --max-old-space-size=6000 --import ./src/register.mjs src/cli.mjs shard "${{ inputs.job }}" ${{ matrix.shard }}
+        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine, DEADLINE_MIN: '335' }
+  merge:
+    needs: [plan, shard]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENGINE_REPO }}
+          token: ${{ secrets.ENGINE_TOKEN || github.token }}
+          path: engine
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --max-old-space-size=6000 --import ./src/register.mjs src/cli.mjs merge "${{ inputs.job }}"
+        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine }
