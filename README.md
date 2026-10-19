@@ -1,0 +1,38 @@
+# amibroker-analysis-runner
+
+Runs long **Optimize** and **Walk-Forward** jobs for the AmiBroker web app on free GitHub Actions machines,
+so they keep going while your phone is off. Data is read from your R2 bucket (same files the app uses). End-of-day data only.
+
+## One-time setup (about 10 minutes, all from a phone browser is possible)
+
+1. **Create a new GitHub repo** (e.g. `amibroker-analysis-runner`) and upload the contents of this folder
+   (`.github`, `src`, `test`, `package.json`). Private is safest; see "Limits" below.
+2. **Allow the workflow to write**: repo → Settings → Actions → General → *Workflow permissions* → **Read and write permissions**. Save.
+3. **Tell it where the app code is**: repo → Settings → Secrets and variables → Actions → *Variables* → New variable
+   `ENGINE_REPO` = `your-user/amibroker-web-engine` (the repo that holds the app's `js/` folder).
+   If that repo is private, also add a *secret* `ENGINE_TOKEN` = a token that can read it (Contents: read).
+4. **Create a token for the app**: GitHub → Settings → Developer settings → Fine-grained tokens → Generate.
+   Only this runner repo; permissions **Contents: Read and write** and **Actions: Read and write**. Copy it.
+5. In the app: Analysis → **Run on GitHub…** → fill *Runner repo* (`your-user/amibroker-analysis-runner`), *Token*, *Save & test*.
+
+## Using it
+Analysis window: pick formula, symbols, range, set Settings → Optimize (target, engine) → Run on GitHub → **Send Optimize** or **Send Walk-Forward**.
+Close the app. Later open Analysis → Run on GitHub…: progress and time left are shown; when finished tap **View result**.
+Tap a row in the table to run a backtest of those values on your phone as usual.
+
+How it works: the app writes `jobs/<id>/job.json` to this repo and starts the `analysis` workflow. The combinations are split over N machines
+(default 6, max 20). A run lasts at most ~6 hours; if the job needs longer it saves its progress and starts the next run by itself (up to 30 runs).
+Results come back as `jobs/<id>/result.json`.
+
+## Limits and honest notes
+- Free GitHub accounts get about 2,000 Actions minutes/month on **private** repos (public repos: unlimited). 6 machines × 3 hours = 1,080 minutes.
+  Big jobs can use the month's quota. Check Settings → Billing.
+- GitHub's terms restrict Actions to project-related use and forbid using it as a general compute service. Optimizing strategies for a
+  project in the same account is a grey area; heavy use could get the repo's Actions limited. Use at your own risk.
+- Intraday time frames and `Study()` drawings are not available on the runner. Only Optimize and Walk-Forward can be sent.
+- Free machines have ~7 GB RAM; a very large symbol list with long history may run out of memory: send fewer symbols or use more machines.
+- Anything in `jobs/` is stored in the repo: formula code and results. Keep the repo private if the formula is secret.
+- To cancel a job: Open on GitHub → Actions → the run → Cancel. Delete old `jobs/<id>` folders to save space.
+
+## Tests
+`ENGINE_DIR=/path/to/amibroker-web-engine npm test` (uses a fake R2 and fake GitHub; no network).
