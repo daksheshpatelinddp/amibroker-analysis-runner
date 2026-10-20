@@ -1,1 +1,1 @@
-{"state":"continuing","shards":6,"mode":"optimize","run":5,"startedAt":1792419979943,"updatedAt":1792520816105,"message":"6 of 6 shards not finished: another run continues from the saved progress."}
+{"state":"running","shards":6,"mode":"optimize","run":6,"startedAt":1792419979943,"updatedAt":1792520831073,"message":""}
