@@ -1,1 +1,1 @@
-{"shard":11,"state":"running","stage":"run","done":36182,"total":206804,"label":"{\"Fast SMA\":51,\"Slow SMA\":167,\"Exit SMA\":105}","startedAt":1792565015223,"updatedAt":1792573419142,"run":1}
+{"shard":11,"state":"failed","stage":"run","done":36219,"total":206804,"label":"GitHub: could not write jobs/mvhqwl7o-ekc7/shard-11.json after several tries","startedAt":1792565015223,"updatedAt":1792573464608,"run":1}
