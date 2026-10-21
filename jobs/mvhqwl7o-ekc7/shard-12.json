@@ -1,0 +1,1 @@
+{"state":"done","mode":"optimize","shard":12,"updatedAt":1792565025525,"result":{"rows":[],"optParams":[],"errors":["This formula has no Optimize() calls. Use Optimize(\"name\", default, min, max, step) in place of a fixed number."],"combinations":0,"gridTotal":0}}
