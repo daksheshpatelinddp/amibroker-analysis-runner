@@ -1,1 +1,1 @@
-{"state":"running","shards":6,"mode":"optimize","run":6,"startedAt":1792419979943,"updatedAt":1792520831073,"message":""}
+{"state":"failed","shards":6,"mode":"optimize","run":6,"startedAt":1792419979943,"updatedAt":1792540984705,"message":"Shard 4 failed: TypeError: fetch failed"}
