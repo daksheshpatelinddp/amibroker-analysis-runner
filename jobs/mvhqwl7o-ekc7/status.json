@@ -1,1 +1,1 @@
-{"state":"running","shards":16,"mode":"optimize","run":1,"startedAt":1792564999731,"updatedAt":1792564999731,"message":""}
+{"state":"failed","shards":16,"mode":"optimize","run":1,"startedAt":1792564999731,"updatedAt":1792585171324,"message":"Shard 6 failed: Error: GitHub: could not write jobs/mvhqwl7o-ekc7/shard-6.json after several tries"}
