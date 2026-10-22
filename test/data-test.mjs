@@ -38,4 +38,15 @@ ok(fileUrl({ baseUrl: 'https://r2/x' }, 'packs/b0.pack', 'https://github.com/o/r
 ok(fileUrl({ baseUrl: 'https://r2/x/' }, 'manifest.json', '') === 'https://r2/x/manifest.json', 'R2 file names');
 // local server answers ranges like R2
 const s = await serveDir(data); const r = await fetch(s.url + '/recent.json', { headers: { Range: 'bytes=0-9' } }); ok(r.status === 206 && (await r.text()).length === 10, 'range answered'); const nf = await fetch(s.url + '/nope'); ok(nf.status === 404, '404 for a missing file'); const esc = await fetch(s.url + '/..%2f..%2fetc%2fpasswd'); ok(esc.status === 404, 'no path escape'); await s.close();
+
+// regression: the workflow passes a RELATIVE folder ("data"); the local server used to answer 404 for everything
+{
+  const { serveDir } = await import('../src/data.mjs'); const fs2 = await import('node:fs'); const os2 = await import('node:os'); const p2 = await import('node:path');
+  const base = fs2.mkdtempSync(p2.join(os2.tmpdir(), 'rel-')); fs2.mkdirSync(p2.join(base, 'data')); fs2.writeFileSync(p2.join(base, 'data', 'a.txt'), 'hello');
+  const old = process.cwd(); process.chdir(base);
+  const sv = await serveDir('data'); const r = await fetch(sv.url + '/a.txt'); const esc = await fetch(sv.url + '/..%2Fdata2');
+  process.chdir(old);
+  if (r.status === 200 && (await r.text()) === 'hello' && esc.status === 404) pass++; else { fail++; console.log('FAIL relative folder', r.status); }
+}
+
 server.close(); console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
