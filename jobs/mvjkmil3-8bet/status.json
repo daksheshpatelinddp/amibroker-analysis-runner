@@ -1,1 +1,1 @@
-{"state":"running","shards":8,"mode":"optimize","run":2,"startedAt":1792675381638,"stalls":1,"updatedAt":1792675454425,"message":""}
+{"state":"failed","shards":8,"mode":"optimize","run":2,"startedAt":1792675381638,"stalls":2,"updatedAt":1792675493723,"message":"8 shard(s) crashed twice without saving (see the shard log in Actions). Stopped."}
