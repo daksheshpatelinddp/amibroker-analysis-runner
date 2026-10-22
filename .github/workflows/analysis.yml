@@ -1,5 +1,7 @@
 # One analysis job (Optimize or Walk-Forward) split over several machines. Started by the app (workflow_dispatch with the job id).
 # A run lasts at most about 6 hours; a job that needs longer saves its progress and the last step starts the next run by itself.
+# Market data: downloaded ONCE per data version (R2, or a GitHub Release when the variable DATA_RELEASE_URL is set) and kept in the
+# Actions cache. All machines read that copy, so the data host gets a handful of requests per run, not thousands.
 name: analysis
 on:
   workflow_dispatch:
@@ -10,11 +12,19 @@ on:
 permissions:
   contents: write
   actions: write
+env:
+  ENGINE_DIR: engine
+  DATA_DIR: data
+  DATA_RELEASE_URL: ${{ vars.DATA_RELEASE_URL }}
+  GITHUB_TOKEN: ${{ github.token }}
+  REPO: ${{ github.repository }}
+  BRANCH: ${{ github.ref_name }}
 jobs:
   plan:
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.p.outputs.shards }}
+      datakey: ${{ steps.k.outputs.key }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -26,7 +36,13 @@ jobs:
         with: { node-version: 22 }
       - id: p
         run: node --import ./src/register.mjs src/cli.mjs plan "${{ inputs.job }}"
-        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine }
+      - id: k
+        run: node --import ./src/register.mjs src/cli.mjs datakey "${{ inputs.job }}"
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: ${{ steps.k.outputs.key }}
+      - run: node --import ./src/register.mjs src/cli.mjs sync "${{ inputs.job }}"
   shard:
     needs: plan
     runs-on: ubuntu-latest
@@ -45,8 +61,12 @@ jobs:
           path: engine
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ${{ needs.plan.outputs.datakey }}
       - run: node --max-old-space-size=6000 --import ./src/register.mjs src/cli.mjs shard "${{ inputs.job }}" ${{ matrix.shard }}
-        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine, DEADLINE_MIN: '335' }
+        env: { DEADLINE_MIN: '335' }
   merge:
     needs: [plan, shard]
     if: ${{ always() && needs.plan.result == 'success' }}
@@ -61,5 +81,8 @@ jobs:
           path: engine
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ${{ needs.plan.outputs.datakey }}
       - run: node --max-old-space-size=6000 --import ./src/register.mjs src/cli.mjs merge "${{ inputs.job }}"
-        env: { GITHUB_TOKEN: '${{ github.token }}', REPO: '${{ github.repository }}', BRANCH: '${{ github.ref_name }}', ENGINE_DIR: engine }
