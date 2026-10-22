@@ -34,13 +34,16 @@ export function buildFakeR2(symbols, dir = fs.mkdtempSync(path.join(os.tmpdir(),
 }
 
 export function serve(dir) {
+  const hits = [];
   const server = http.createServer((q, r) => {
+    hits.push(q.method + ' ' + q.url.split('?')[0]);
     const f = path.join(dir, decodeURIComponent(q.url.split('?')[0]));
     fs.readFile(f, (e, buf) => {
       if (e) { r.writeHead(404); r.end(); return; }
       const m = /bytes=(\d+)-(\d+)/.exec(q.headers.range || '');
-      if (m) { r.writeHead(206, { 'content-length': +m[2] - +m[1] + 1 }); r.end(buf.subarray(+m[1], +m[2] + 1)); } else { r.writeHead(200, { 'content-length': buf.length }); r.end(buf); }
+      const st = fs.statSync(f), tagh = { etag: `"${st.size}-${Math.round(st.mtimeMs)}"` };
+      if (m) { r.writeHead(206, { 'content-length': +m[2] - +m[1] + 1, ...tagh }); r.end(buf.subarray(+m[1], +m[2] + 1)); } else { r.writeHead(200, { 'content-length': buf.length, ...tagh }); r.end(buf); }
     });
   }).listen(0);
-  return new Promise((res) => server.once('listening', () => res({ server, url: `http://localhost:${server.address().port}` })));
+  return new Promise((res) => server.once('listening', () => res({ server, hits, url: `http://localhost:${server.address().port}` })));
 }
