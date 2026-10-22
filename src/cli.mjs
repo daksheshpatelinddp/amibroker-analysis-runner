@@ -1,9 +1,10 @@
-// node --import ./src/register.mjs src/cli.mjs plan|shard|merge <jobId> [shardIndex]      (GitHub Actions)
+// node --import ./src/register.mjs src/cli.mjs plan|datakey|sync|shard|merge <jobId> [shardIndex]      (GitHub Actions)
 // node --import ./src/register.mjs src/cli.mjs local <folder> <jobId>                      (a whole job on one computer; also used by the tests)
 import fs from 'node:fs';
 import { GhStore, FsStore } from './store.mjs';
 import { loadEngine } from './engine.mjs';
-import { planJob, runShard, mergeJob } from './jobs.mjs';
+import { planJob, runShard, mergeJob, readJob } from './jobs.mjs';
+import { dataKey, syncData } from './data.mjs';
 
 const [cmd, a, b, c] = process.argv.slice(2);
 const out = (k, v) => { if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); console.log(`${k}=${v}`); };
@@ -11,6 +12,8 @@ const gh = () => new GhStore({ repo: process.env.REPO, token: process.env.GITHUB
 
 try {
   if (cmd === 'plan') { const r = await planJob(gh(), a); out('shards', JSON.stringify(r.shards)); }
+  else if (cmd === 'datakey') { const job = await readJob(gh(), a); out('key', await dataKey(job.dataset)); }
+  else if (cmd === 'sync') { const job = await readJob(gh(), a); await syncData(job.dataset, process.env.DATA_DIR || 'data'); }
   else if (cmd === 'shard') { await runShard(gh(), await loadEngine(), a, Number(b), { deadlineMs: (Number(process.env.DEADLINE_MIN) || 330) * 60000 }); }
   else if (cmd === 'merge') {
     const store = gh(), r = await mergeJob(store, await loadEngine(), a);
