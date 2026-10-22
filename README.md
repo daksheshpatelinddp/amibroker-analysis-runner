@@ -36,3 +36,23 @@ Results come back as `jobs/<id>/result.json`.
 
 ## Tests
 `ENGINE_DIR=/path/to/amibroker-web-engine npm test` (uses a fake R2 and fake GitHub; no network).
+
+## Keeping Cloudflare R2 reads (Class B) near zero
+
+Each shard used to read market data straight from R2 with thousands of small Range requests. Now:
+
+1. The `plan` job asks the data host for `manifest.json` and a HEAD of `recent.json` (3 requests) and builds a cache key from them.
+2. If the Actions cache has that key, **nothing is downloaded**. Otherwise every data file is downloaded once (about 1 request per file) and cached.
+3. All shards and the merge job restore that cache and read from a local server (`DATA_DIR=data`). Zero requests reach R2 while the job runs.
+
+Result: a few dozen R2 requests per data update instead of thousands per job. The cache key changes only when your data changes.
+
+Note: GitHub evicts caches unused for 7 days and keeps 10 GB per repo; the next run simply downloads again.
+
+### Fully R2-free (optional): GitHub Release assets
+Git itself is not suitable for these files (100 MB per file limit, history grows forever). Release assets are: up to 2 GB per file, free downloads.
+
+1. In `nse-data-engine`, after converting to parquet/packs, upload every file to a release in this repo, with `/` in the path replaced by `__` (e.g. `packs/2024.pack` -> `packs__2024.pack`), including `manifest.json` and `recent.json`:
+   `gh release upload data-latest <files> --clobber --repo <you>/amibroker-analysis-runner`
+2. In this repo: Settings > Secrets and variables > Actions > Variables > add `DATA_RELEASE_URL` = `https://github.com/<you>/amibroker-analysis-runner/releases/download/data-latest`
+3. The runner then downloads from the release instead of R2 (still cached).
