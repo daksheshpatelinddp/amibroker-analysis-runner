@@ -27,7 +27,8 @@ export async function planJob(store, id) {
 const SESSION = (engine, loader, job) => engine.core.makeSession(loader.loadBars, job.interval || 'D');
 
 /** One shard. opts: { deadlineMs (stop and save before the runner's time limit), checkpointMs, progressMs } */
-export async function runShard(store, engine, id, index, { deadlineMs = 330 * 60 * 1000, checkpointMs = 10 * 60 * 1000, progressMs = 120 * 1000, log = console.log } = {}) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export async function runShard(store, engine, id, index, { deadlineMs = 330 * 60 * 1000, checkpointMs = 10 * 60 * 1000, progressMs = 180 * 1000, log = console.log } = {}) {
   const job = await readJob(store, id), core = engine.core;
   const status = await store.get(P(id, 'status.json'));
   if (status && status.state === 'done') return { state: 'done' };
@@ -37,6 +38,7 @@ export async function runShard(store, engine, id, index, { deadlineMs = 330 * 60
   const loader = await makeLoader(engine, job.dataset), session = SESSION(engine, loader, job);
   const prog = { shard: index, state: 'running', stage: 'start', done: 0, total: 0, label: '', startedAt: started, updatedAt: started, run: status ? status.run : 1 };
   let dirty = true; const flush = async () => { prog.updatedAt = now(); await store.put(P(id, `progress-${index}.json`), prog); dirty = false; };
+  await sleep(Math.floor(Math.random() * 20000) * (process.env.NO_JITTER ? 0 : 1));   // shards start together: spread their first commits
   await flush();
   const timer = setInterval(() => { if (dirty) flush().catch((e) => log('progress not saved:', e.message)); }, progressMs);
   const onProgress = (i, n, label, stage) => {
