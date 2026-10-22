@@ -58,10 +58,11 @@ export async function syncData(dataset, dir, { fetchFn = fetch, log = console.lo
 }
 
 /** A static web server for the folder with Range support (what the app's reader needs). Returns { url, close }. */
-export function serveDir(dir) {
+export function serveDir(dirIn) {
+  const dir = path.resolve(dirIn);   // the workflow passes a relative folder ("data")
   const server = http.createServer((q, r) => {
     const rel = decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, ''), f = path.join(dir, rel);
-    if (!f.startsWith(path.resolve(dir)) || !fs.existsSync(f) || !fs.statSync(f).isFile()) { r.writeHead(404); r.end(); return; }
+    if (!(f === dir || f.startsWith(dir + path.sep)) || !fs.existsSync(f) || !fs.statSync(f).isFile()) { r.writeHead(404); r.end(); return; }
     const size = fs.statSync(f).size, m = /bytes=(\d*)-(\d*)/.exec(q.headers.range || '');
     if (m && (m[1] || m[2])) {
       let a = m[1] === '' ? Math.max(0, size - Number(m[2])) : Number(m[1]), b = m[1] === '' || m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
