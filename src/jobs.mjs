@@ -18,7 +18,7 @@ export async function planJob(store, id) {
   const job = await readJob(store, id);
   const prev = await store.get(P(id, 'status.json'));
   if (prev && prev.state === 'done') return { shards: [0], job, already: true };
-  const st = { state: 'running', shards: job.shards, mode: job.mode, run: (prev && prev.run || 0) + 1, startedAt: prev && prev.startedAt || now(), updatedAt: now(), message: '' };
+  const st = { state: 'running', shards: job.shards, mode: job.mode, run: (prev && prev.run || 0) + 1, startedAt: prev && prev.startedAt || now(), stalls: prev && prev.stalls || 0, updatedAt: now(), message: '' };
   if (st.run > MAX_RUNS) { await store.put(P(id, 'status.json'), { ...st, state: 'failed', message: `Stopped after ${MAX_RUNS} runs.` }); throw new Error('too many runs'); }
   await store.put(P(id, 'status.json'), st);
   return { shards: Array.from({ length: job.shards }, (_, i) => i), job };
@@ -83,7 +83,10 @@ export async function mergeJob(store, engine, id, { log = console.log } = {}) {
   if (failed) { await store.put(P(id, 'status.json'), { ...status, state: 'failed', updatedAt: now(), message: `Shard ${failed.shard} failed: ${String(failed.error || '').split('\n')[0]}` }); return { state: 'failed' }; }
   if (shards.some((s) => !s || s.state !== 'done')) {
     const left = shards.filter((s) => !s || s.state !== 'done').length;
-    await store.put(P(id, 'status.json'), { ...status, state: 'continuing', updatedAt: now(), message: `${left} of ${job.shards} shards not finished: another run continues from the saved progress.` });
+    // A shard with no saved file at all crashed before it could save (a working shard always saves 'paused' or 'done'). Do not loop on that.
+    const crashed = shards.filter((s) => !s).length, stalls = crashed ? (status.stalls || 0) + 1 : 0;
+    if (stalls >= 2) { await store.put(P(id, 'status.json'), { ...status, state: 'failed', stalls, updatedAt: now(), message: `${crashed} shard(s) crashed twice without saving (see the shard log in Actions). Stopped.` }); return { state: 'failed' }; }
+    await store.put(P(id, 'status.json'), { ...status, state: 'continuing', stalls, updatedAt: now(), message: `${left} of ${job.shards} shards not finished: another run continues from the saved progress.` });
     return { state: 'continue' };
   }
   const results = shards.map((s) => s.result);

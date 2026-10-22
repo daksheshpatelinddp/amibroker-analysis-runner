@@ -15,9 +15,18 @@ export class GhStore {
   constructor({ repo, token, branch = 'main', workflow = 'analysis.yml', apiBase = 'https://api.github.com' }) { this.api = apiBase; this.repo = repo; this.token = token; this.branch = branch; this.workflow = workflow; this.sha = new Map(); this.q = Promise.resolve(); }
   _h(extra = {}) { return { Authorization: `Bearer ${this.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...extra }; }
   async get(p) {
-    const r = await fetch(`${this.api}/repos/${this.repo}/contents/${p}?ref=${this.branch}`, { headers: this._h() });
-    if (r.status === 404) return null;
-    if (!r.ok) throw new Error(`GitHub ${r.status} reading ${p}`);
+    let r;
+    for (let attempt = 0; ; attempt++) {
+      r = await fetch(`${this.api}/repos/${this.repo}/contents/${p}?ref=${this.branch}`, { headers: this._h() });
+      if (r.status === 404) return null;
+      if (r.ok) break;
+      const body = (await r.text().catch(() => '')).slice(0, 160);
+      if ((r.status === 403 || r.status === 429 || r.status >= 500) && attempt < 12) {   // rate limit or hiccup: wait and try again
+        const ra = Number(r.headers.get('retry-after')) * 1000 || 0;
+        await sleep(Math.min(90000, Math.max(ra, 3000 * (attempt + 1))) * (0.7 + Math.random() * 0.6)); continue;
+      }
+      throw new Error(`GitHub ${r.status} reading ${p}: ${body}`);
+    }
     const j = await r.json(); this.sha.set(p, j.sha);
     const txt = j.content ? Buffer.from(j.content, 'base64').toString('utf8') : await (await fetch(j.download_url, { headers: this._h() })).text();   // files over 1 MB come without content
     return JSON.parse(txt);
