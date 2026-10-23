@@ -1,1 +1,1 @@
-{"shard":7,"state":"running","stage":"start","done":0,"total":0,"label":"","startedAt":1792714605726,"updatedAt":1792714620953,"run":2}
+{"shard":7,"state":"running","stage":"run","done":17386,"total":17579,"label":"{\"Fast SMA\":199,\"Slow SMA\":100,\"Exit SMA\":80}","startedAt":1792714605726,"updatedAt":1792714802277,"run":2}
