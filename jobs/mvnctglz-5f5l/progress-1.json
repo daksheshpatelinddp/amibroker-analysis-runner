@@ -1,1 +1,1 @@
-{"shard":1,"state":"running","stage":"run","done":31466,"total":79097,"label":"{\"BB Period\":32,\"BB Deviation\":2.6,\"Exit EMA Period (Weekly)\":100,\"ATR Period\":19,\"ATR Multiplier\":2,\"Initial SL %\":20}","startedAt":1792924403798,"updatedAt":1792936115593,"run":2}
+{"shard":1,"state":"running","stage":"run","done":31656,"total":79097,"label":"{\"BB Period\":32,\"BB Deviation\":2.8,\"Exit EMA Period (Weekly)\":80,\"ATR Period\":14,\"ATR Multiplier\":1.4,\"Initial SL %\":15}","startedAt":1792924403798,"updatedAt":1792936295593,"run":2}
