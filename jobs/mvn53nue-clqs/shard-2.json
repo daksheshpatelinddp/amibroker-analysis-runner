@@ -1,0 +1,1 @@
+{"state":"done","mode":"walk","shard":2,"updatedAt":1792891218827,"result":{"errors":["This formula has no Optimize() calls, so there is nothing to walk forward."],"steps":[]}}
