@@ -1,1 +1,1 @@
-{"shard":6,"state":"running","stage":"run","done":191,"total":1464,"label":"{\"BB Period\":24,\"BB Deviation\":2,\"Exit EMA Period (Weekly)\":90,\"Initial SL %\":20}","startedAt":1792892419658,"updatedAt":1792892608367,"run":1}
+{"shard":6,"state":"running","stage":"run","done":390,"total":1464,"label":"{\"BB Period\":28,\"BB Deviation\":2.5,\"Exit EMA Period (Weekly)\":60,\"Initial SL %\":15}","startedAt":1792892419658,"updatedAt":1792892788407,"run":1}
