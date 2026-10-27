@@ -1,1 +1,1 @@
-{"shard":2,"state":"running","stage":"run","done":8062,"total":13671,"label":"{\"MaxOpen\":40,\"BB Period\":23,\"BB Deviation\":4,\"ATR Multiplier\":1.4,\"Initial SL %\":20}","startedAt":1793088990485,"updatedAt":1793099981741,"run":1}
+{"shard":2,"state":"running","stage":"run","done":8193,"total":13671,"label":"{\"MaxOpen\":40,\"BB Period\":26,\"BB Deviation\":2,\"ATR Multiplier\":1.8,\"Initial SL %\":20}","startedAt":1793088990485,"updatedAt":1793100161781,"run":1}
