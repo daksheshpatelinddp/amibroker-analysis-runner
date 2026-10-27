@@ -1,1 +1,1 @@
-{"shard":4,"state":"running","stage":"run","done":540,"total":570,"label":"{\"MaxOpen\":50,\"BB Period\":39,\"BB Deviation\":3.9}","startedAt":1793080579213,"updatedAt":1793081311233,"run":1}
+{"shard":4,"state":"done","stage":"done","done":570,"total":570,"label":"","startedAt":1793080579213,"updatedAt":1793081352019,"run":1}
