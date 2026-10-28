@@ -1,0 +1,1 @@
+{"v":1,"mode":"optimize","finishedAt":1793175940081,"elapsedMs":182897,"result":{"rows":[],"optParams":[],"errors":["This formula has no Optimize() calls. Use Optimize(\"name\", default, min, max, step) in place of a fixed number."],"tested":0,"combinations":0,"next":0,"completed":true,"metric":"carMdd"}}
