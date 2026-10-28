@@ -1,1 +1,1 @@
-{"shard":2,"state":"running","stage":"run","done":272,"total":11466,"label":"{\"Minimum Avg RSI Score\":60,\"ROC Period (for ranking)\":84,\" map \":75,\"MaxOpen\":25}","startedAt":1793180728749,"updatedAt":1793180925366,"run":1}
+{"shard":2,"state":"running","stage":"run","done":547,"total":11466,"label":"{\"Minimum Avg RSI Score\":60,\"ROC Period (for ranking)\":189,\" map \":50,\"MaxOpen\":20}","startedAt":1793180728749,"updatedAt":1793181105365,"run":1}
