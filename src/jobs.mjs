@@ -1,16 +1,32 @@
 // The three steps of a job: plan (how many shards), shard (one machine's share of the combinations), merge (join the shares, or ask for another run).
 import { makeLoader } from './engine.mjs';
+import { nfEncode, nfDecode } from './nf.mjs';
 
 const P = (id, f) => `jobs/${id}/${f}`;
 const now = () => Date.now();
 const MAX_RUNS = 30;                       // a job continues itself across runs of at most ~6 hours; 30 runs is far more than ever needed
 
+const MODES = ['optimize', 'walk', 'scan', 'explore', 'backtest'];
+const SPLIT = new Set(['scan', 'explore']);          // one symbol is independent of the others: the symbols are shared out over the machines
+const MAX_RESULT_BYTES = 60e6;                        // GitHub's contents API takes files up to 100 MB; stay well below
+const MAX_EXPLORE_ROWS = 100000;
+const minPerShard = () => Number(process.env.MIN_PER_SHARD) || 100;   // a machine needs ~1-2 minutes to start: not worth it for fewer symbols
+
+/** How many machines a job really uses. Optimize / Walk-Forward: as many as asked (1-20). Scan / Explore: at most one per 100 symbols.
+ *  Backtest: one (a portfolio backtest needs all symbols together). The app has the same rule (js/remote-analysis.js, jobShards). */
+export function jobShards(mode, nSymbols, wanted) {
+  const w = Math.max(1, Math.min(20, Math.floor(wanted) || 1));
+  if (mode === 'backtest') return 1;
+  if (SPLIT.has(mode)) return Math.max(1, Math.min(w, Math.ceil(nSymbols / minPerShard())));
+  return w;
+}
+
 export async function readJob(store, id) {
   const job = await store.get(P(id, 'job.json'));
   if (!job) throw new Error(`jobs/${id}/job.json not found`);
-  if (!['optimize', 'walk'].includes(job.mode)) throw new Error(`Unknown job type "${job.mode}"`);
+  if (!MODES.includes(job.mode)) throw new Error(`Unknown job type "${job.mode}"`);
   if (/^\d+[mh]$/.test(String(job.interval || 'D'))) throw new Error('Intraday time frames are not supported on the server (end-of-day data only).');
-  job.shards = Math.max(1, Math.min(20, Math.floor(job.shards) || 1));
+  job.shards = jobShards(job.mode, (job.symbols || []).length, job.shards);
   return job;
 }
 
@@ -47,9 +63,21 @@ export async function runShard(store, engine, id, index, { deadlineMs = 330 * 60
   };
   const common = { code: job.code, symbols: job.symbols, session, settings: job.settings, metric: job.metric, engine: job.engine, maxEval: job.maxEval, shard: { index, count: job.shards }, onProgress, cancel, checkpointEvery: checkpointMs };
   const save = (state, extra) => store.put(P(id, `shard-${index}.json`), { state, mode: job.mode, shard: index, updatedAt: now(), ...extra });
+  const mine = SPLIT.has(job.mode) ? job.symbols.filter((_, i) => i % job.shards === index) : job.symbols;   // round-robin: balanced shares
+  const guard = () => { if (cancel.stop) throw new Error('The time limit of this machine was reached before the job finished. Send fewer symbols or use more machines.'); };
   try {
     let out;
-    if (job.mode === 'optimize') {
+    if (job.mode === 'scan') {
+      const r = await core.scan({ code: job.code, symbols: mine, session, range: job.range, lastBars: job.lastBars || 1, onProgress, cancel }); guard();
+      out = { state: 'done', result: nfEncode({ rows: r.rows, errors: r.errors }) };
+    } else if (job.mode === 'explore') {
+      const raw = await core.exploreCollect({ code: job.code, symbols: mine, session, range: job.range, maxRows: job.maxRows || MAX_EXPLORE_ROWS, onProgress, cancel }); guard();
+      out = { state: 'done', result: nfEncode(raw) };
+    } else if (job.mode === 'backtest') {
+      const r = await core.backtest({ code: job.code, symbols: mine, session, range: job.range, settings: job.settings, mode: job.btMode || 'portfolio', onProgress, cancel }); guard();
+      const { runs, ...slim } = r;                  // `runs` holds every bar of every symbol: far too big, and the result views do not need it
+      out = { state: 'done', result: nfEncode(slim) };
+    } else if (job.mode === 'optimize') {
       const r = await core.optimize({ ...common, range: job.range, runs: job.runs, keep: job.keep, resume: prior && prior.resume || null,
         onCheckpoint: (state) => save('running', { resume: state }) });
       const smart = r.engine === 'smart';
@@ -91,7 +119,20 @@ export async function mergeJob(store, engine, id, { log = console.log } = {}) {
   }
   const results = shards.map((s) => s.result);
   let result;
-  if (job.mode === 'optimize') {
+  const order = new Map((job.symbols || []).map((s, i) => [s, i])), byOrder = (a, b) => (order.get(a.symbol) ?? 0) - (order.get(b.symbol) ?? 0);   // original symbol order
+  if (job.mode === 'scan') {
+    result = nfEncode({ rows: nfDecode(results.flatMap((r) => r.rows || [])).sort(byOrder), errors: results.flatMap((r) => r.errors || []) });
+  } else if (job.mode === 'explore') {
+    const parts = results.map((r) => nfDecode(r)), cap = job.maxRows || MAX_EXPLORE_ROWS;
+    let rows = parts.flatMap((p) => p.rows || []).sort(byOrder); const total = rows.length; if (rows.length > cap) rows.length = cap;
+    const xy = {}; for (const p of parts) for (const [name, c] of Object.entries(p.xy || {})) { const t = (xy[name] = xy[name] || { points: [], xLabel: c.xLabel, yLabel: c.yLabel }); t.points.push(...c.points); }
+    const withMeta = parts.filter((p) => p.meta), last = withMeta[withMeta.length - 1] || {}, colNames = [];
+    for (const p of parts) for (const c of p.colNames || []) if (!colNames.includes(c)) colNames.push(c);
+    const fin = core.exploreFinish({ rows, errors: parts.flatMap((p) => p.errors || []), xy, colNames, meta: (withMeta[0] || {}).meta || null, noDefault: !!last.noDefault, sortCols: last.sortCols || [], summary: last.summary || null });
+    result = nfEncode({ table: { head: fin.table.head, cols: fin.table.cols, rows: fin.table.rows, summary: fin.table.summary }, rows: fin.rows.map((r) => ({ symbol: r.symbol, date: r.date })), xy: fin.xy, errors: fin.errors, columns: fin.columns, truncated: total > cap ? total : 0 });
+  } else if (job.mode === 'backtest') {
+    result = results[0];
+  } else if (job.mode === 'optimize') {
     const dir = (core.METRICS[job.metric] || core.METRICS.carMdd)[1];
     const rows = results.flatMap((r) => r.rows || []).sort((x, y) => dir * (y.stats[job.metric] - x.stats[job.metric]));
     if (job.keep > 0 && rows.length > job.keep) rows.length = job.keep;
@@ -111,6 +152,9 @@ export async function mergeJob(store, engine, id, { log = console.log } = {}) {
     }
   }
   const finished = now();
+  if (JSON.stringify(result).length > MAX_RESULT_BYTES) {
+    await store.put(P(id, 'status.json'), { ...status, state: 'failed', updatedAt: finished, message: 'The result is too big to store in the repo (over 60 MB). Send fewer symbols or a shorter date range.' }); return { state: 'failed' };
+  }
   await store.put(P(id, 'result.json'), { v: 1, mode: job.mode, finishedAt: finished, elapsedMs: finished - (status.startedAt || finished), result });
   await store.put(P(id, 'status.json'), { ...status, state: 'done', updatedAt: finished, message: '' });
   return { state: 'done' };
