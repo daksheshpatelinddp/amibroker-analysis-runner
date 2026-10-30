@@ -1,7 +1,21 @@
 // A small stand-in for the R2 bucket in the "pack" layout (what convert.py writes), served over HTTP with Range support.
 import fs from 'node:fs'; import path from 'node:path'; import http from 'node:http'; import zlib from 'node:zlib'; import os from 'node:os';
 
+// pack format v2 (what convert.py writes now): int32 volume / delivery (-1 = unknown), the 7*n int32 values regrouped into 4 byte-planes
+function encodeBlockV2(days, o, h, l, c, v) {
+  const n = days.length, scale = 100;
+  const cs = c.map((x) => Math.round(x * scale));
+  const dd = days.map((d, i) => d - (i ? days[i - 1] : 0)), cd = cs.map((x, i) => x - (i ? cs[i - 1] : 0));
+  const oc = o.map((x, i) => Math.round(x * scale) - cs[i]), hc = h.map((x, i) => Math.round(x * scale) - cs[i]), lc = l.map((x, i) => Math.round(x * scale) - cs[i]);
+  const words = Buffer.from(Int32Array.from([...dd, ...cd, ...oc, ...hc, ...lc, ...v.map((x) => Math.round(x)), ...new Array(n).fill(-1)]).buffer);
+  const planes = Buffer.alloc(words.length); const W = words.length / 4;
+  for (let i = 0; i < W; i++) for (let k = 0; k < 4; k++) planes[k * W + i] = words[i * 4 + k];
+  const head = Buffer.alloc(12); head[0] = 0x41; head[1] = 0x42; head[2] = 2; head[3] = 1; head.writeUInt32LE(n, 4); head.writeInt32LE(scale, 8);
+  return zlib.deflateSync(Buffer.concat([head, planes]));
+}
+
 function encodeBlock(days, o, h, l, c, v) {
+  if (process.env.PACK_VERSION === '2') return encodeBlockV2(days, o, h, l, c, v);
   const n = days.length, scale = 100, i32 = (arr) => Buffer.from(Int32Array.from(arr).buffer);
   const cs = c.map((x) => Math.round(x * scale));
   const dd = days.map((d, i) => d - (i ? days[i - 1] : 0)), cd = cs.map((x, i) => x - (i ? cs[i - 1] : 0));
