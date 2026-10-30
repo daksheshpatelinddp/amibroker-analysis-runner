@@ -1,7 +1,7 @@
 # amibroker-analysis-runner
 
-Runs long **Optimize** and **Walk-Forward** jobs for the AmiBroker web app on free GitHub Actions machines,
-so they keep going while your phone is off. Data is read from your R2 bucket (same files the app uses). End-of-day data only.
+Runs long **Optimize**, **Walk-Forward**, **Scan**, **Explore** and **Backtest** jobs for the AmiBroker web app on free GitHub Actions machines,
+so they keep going while your phone is off. The same buttons still work on the phone itself. Data is read from your R2 bucket (same files the app uses). End-of-day data only.
 
 ## One-time setup (about 10 minutes, all from a phone browser is possible)
 
@@ -16,12 +16,12 @@ so they keep going while your phone is off. Data is read from your R2 bucket (sa
 5. In the app: Analysis → **Run on GitHub…** → fill *Runner repo* (`your-user/amibroker-analysis-runner`), *Token*, *Save & test*.
 
 ## Using it
-Analysis window: pick formula, symbols, range, set Settings → Optimize (target, engine) → Run on GitHub → **Send Optimize** or **Send Walk-Forward**.
+Analysis window: pick formula, symbols, range, (for Optimize / Walk-Forward set Settings → Optimize) → Run on GitHub → **Send Scan / Explore / Backtest / Optimize / Walk-Forward**.
 Close the app. Later open Analysis → Run on GitHub…: progress and time left are shown; when finished tap **View result**.
 Tap a row in the table to run a backtest of those values on your phone as usual.
 
-How it works: the app writes `jobs/<id>/job.json` to this repo and starts the `analysis` workflow. The combinations are split over N machines
-(default 6, max 20). A run lasts at most ~6 hours; if the job needs longer it saves its progress and starts the next run by itself (up to 30 runs).
+How it works: the app writes `jobs/<id>/job.json` to this repo and starts the `analysis` workflow. Optimize / Walk-Forward: the combinations are split over N machines
+(default 6, max 20). Scan / Explore: the symbols are split over the machines, at most one machine per 100 symbols. Backtest: one machine (the trades of all symbols share one portfolio). A run lasts at most ~6 hours; if the job needs longer it saves its progress and starts the next run by itself (up to 30 runs).
 Results come back as `jobs/<id>/result.json`.
 
 ## Limits and honest notes
@@ -29,12 +29,14 @@ Results come back as `jobs/<id>/result.json`.
   Big jobs can use the month's quota. Check Settings → Billing.
 - GitHub's terms restrict Actions to project-related use and forbid using it as a general compute service. Optimizing strategies for a
   project in the same account is a grey area; heavy use could get the repo's Actions limited. Use at your own risk.
-- Intraday time frames and `Study()` drawings are not available on the runner. Only Optimize and Walk-Forward can be sent.
+- Intraday time frames and `Study()` drawings are not available on the runner. Breadth data saved only on your phone (ADLine, TRIN ...) is not available there either.
+- Scan / Explore: `StockNum` counts inside each machine's share. Explore keeps the first 100,000 rows. A result must stay under 60 MB (it is stored in the repo).
 - Free machines have ~7 GB RAM; a very large symbol list with long history may run out of memory: send fewer symbols or use more machines.
 - Anything in `jobs/` is stored in the repo: formula code and results. Keep the repo private if the formula is secret.
 - To cancel a job: Open on GitHub → Actions → the run → Cancel. Delete old `jobs/<id>` folders to save space.
 
 ## Tests
+`npm test` also checks that Scan, Explore and Backtest give the same answer on several machines as on one, and that the new pack format v2 is read.
 `ENGINE_DIR=/path/to/amibroker-web-engine npm test` (uses a fake R2 and fake GitHub; no network).
 
 ## Keeping Cloudflare R2 reads (Class B) near zero
