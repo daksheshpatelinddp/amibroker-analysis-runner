@@ -1,6 +1,6 @@
 // The three steps of a job: plan (how many shards), shard (one machine's share of the combinations), merge (join the shares, or ask for another run).
 import { makeLoader } from './engine.mjs';
-import { nfEncode, nfDecode } from './nf.mjs';
+import { nfEncode, nfDecode, gzPack, gzUnpack } from './nf.mjs';
 
 const P = (id, f) => `jobs/${id}/${f}`;
 const now = () => Date.now();
@@ -8,8 +8,10 @@ const MAX_RUNS = 30;                       // a job continues itself across runs
 
 const MODES = ['optimize', 'walk', 'scan', 'explore', 'backtest'];
 const SPLIT = new Set(['scan', 'explore']);          // one symbol is independent of the others: the symbols are shared out over the machines
-const MAX_RESULT_BYTES = 60e6;                        // GitHub's contents API takes files up to 100 MB; stay well below
-const MAX_EXPLORE_ROWS = 100000;
+const MAX_RESULT_BYTES = 80e6;                        // the result as JSON text: the phone has to parse it (a bigger one could crash the tab)
+const MAX_EXPLORE_ROWS = 20000;                       // rows of the sorted exploration table that are kept in the result (the summary rows cover ALL rows)
+const KEEP_XY_POINTS = 20000;
+const SHARD_EXPLORE_ROWS = 200000;                    // rows one machine collects before the join (memory)
 const minPerShard = () => Number(process.env.MIN_PER_SHARD) || 100;   // a machine needs ~1-2 minutes to start: not worth it for fewer symbols
 
 /** How many machines a job really uses. Optimize / Walk-Forward: as many as asked (1-20). Scan / Explore: at most one per 100 symbols.
@@ -69,14 +71,14 @@ export async function runShard(store, engine, id, index, { deadlineMs = 330 * 60
     let out;
     if (job.mode === 'scan') {
       const r = await core.scan({ code: job.code, symbols: mine, session, range: job.range, lastBars: job.lastBars || 1, onProgress, cancel }); guard();
-      out = { state: 'done', result: nfEncode({ rows: r.rows, errors: r.errors }) };
+      out = { state: 'done', result: gzPack(nfEncode({ rows: r.rows, errors: r.errors })) };
     } else if (job.mode === 'explore') {
-      const raw = await core.exploreCollect({ code: job.code, symbols: mine, session, range: job.range, maxRows: job.maxRows || MAX_EXPLORE_ROWS, onProgress, cancel }); guard();
-      out = { state: 'done', result: nfEncode(raw) };
+      const raw = await core.exploreCollect({ code: job.code, symbols: mine, session, range: job.range, maxRows: SHARD_EXPLORE_ROWS, onProgress, cancel }); guard();
+      out = { state: 'done', result: gzPack(nfEncode(raw)) };
     } else if (job.mode === 'backtest') {
       const r = await core.backtest({ code: job.code, symbols: mine, session, range: job.range, settings: job.settings, mode: job.btMode || 'portfolio', onProgress, cancel }); guard();
       const { runs, ...slim } = r;                  // `runs` holds every bar of every symbol: far too big, and the result views do not need it
-      out = { state: 'done', result: nfEncode(slim) };
+      out = { state: 'done', result: gzPack(nfEncode(slim)) };
     } else if (job.mode === 'optimize') {
       const r = await core.optimize({ ...common, range: job.range, runs: job.runs, keep: job.keep, resume: prior && prior.resume || null,
         onCheckpoint: (state) => save('running', { resume: state }) });
@@ -117,19 +119,21 @@ export async function mergeJob(store, engine, id, { log = console.log } = {}) {
     await store.put(P(id, 'status.json'), { ...status, state: 'continuing', stalls, updatedAt: now(), message: `${left} of ${job.shards} shards not finished: another run continues from the saved progress.` });
     return { state: 'continue' };
   }
-  const results = shards.map((s) => s.result);
+  const results = shards.map((s) => gzUnpack(s.result));
   let result;
   const order = new Map((job.symbols || []).map((s, i) => [s, i])), byOrder = (a, b) => (order.get(a.symbol) ?? 0) - (order.get(b.symbol) ?? 0);   // original symbol order
   if (job.mode === 'scan') {
     result = nfEncode({ rows: nfDecode(results.flatMap((r) => r.rows || [])).sort(byOrder), errors: results.flatMap((r) => r.errors || []) });
   } else if (job.mode === 'explore') {
-    const parts = results.map((r) => nfDecode(r)), cap = job.maxRows || MAX_EXPLORE_ROWS;
-    let rows = parts.flatMap((p) => p.rows || []).sort(byOrder); const total = rows.length; if (rows.length > cap) rows.length = cap;
-    const xy = {}; for (const p of parts) for (const [name, c] of Object.entries(p.xy || {})) { const t = (xy[name] = xy[name] || { points: [], xLabel: c.xLabel, yLabel: c.yLabel }); t.points.push(...c.points); }
+    const parts = results.map((r) => nfDecode(r)), keep = job.maxRows || MAX_EXPLORE_ROWS;
+    const rows = parts.flatMap((p) => p.rows || []).sort(byOrder);
+    const xy = {}; for (const p of parts) for (const [name, c] of Object.entries(p.xy || {})) { const t = (xy[name] = xy[name] || { points: [], xLabel: c.xLabel, yLabel: c.yLabel }); for (const pt of c.points) t.points.push(pt); }
+    for (const t of Object.values(xy)) if (t.points.length > KEEP_XY_POINTS) t.points.length = KEEP_XY_POINTS;
     const withMeta = parts.filter((p) => p.meta), last = withMeta[withMeta.length - 1] || {}, colNames = [];
     for (const p of parts) for (const c of p.colNames || []) if (!colNames.includes(c)) colNames.push(c);
     const fin = core.exploreFinish({ rows, errors: parts.flatMap((p) => p.errors || []), xy, colNames, meta: (withMeta[0] || {}).meta || null, noDefault: !!last.noDefault, sortCols: last.sortCols || [], summary: last.summary || null });
-    result = nfEncode({ table: { head: fin.table.head, cols: fin.table.cols, rows: fin.table.rows, summary: fin.table.summary }, rows: fin.rows.map((r) => ({ symbol: r.symbol, date: r.date })), xy: fin.xy, errors: fin.errors, columns: fin.columns, truncated: total > cap ? total : 0 });
+    const total = fin.table.rows.length;                    // sorted, ranked and summarised over ALL rows; only the first `keep` are stored
+    result = nfEncode({ table: { head: fin.table.head, cols: fin.table.cols, rows: fin.table.rows.slice(0, keep), summary: fin.table.summary }, rows: fin.rows.slice(0, keep).map((r) => ({ symbol: r.symbol, date: r.date })), xy: fin.xy, errors: fin.errors, columns: fin.columns, truncated: total > keep ? total : 0 });
   } else if (job.mode === 'backtest') {
     result = results[0];
   } else if (job.mode === 'optimize') {
@@ -152,9 +156,13 @@ export async function mergeJob(store, engine, id, { log = console.log } = {}) {
     }
   }
   const finished = now();
-  if (JSON.stringify(result).length > MAX_RESULT_BYTES) {
-    await store.put(P(id, 'status.json'), { ...status, state: 'failed', updatedAt: finished, message: 'The result is too big to store in the repo (over 60 MB). Send fewer symbols or a shorter date range.' }); return { state: 'failed' };
+  // Scan / Explore / Backtest results are stored compressed ({ gz: ... }) when they are big: JSON of rows shrinks ~10x, so the repo stays small and the phone downloads little.
+  const packed = job.mode === 'scan' || job.mode === 'explore' || job.mode === 'backtest';
+  const rawLen = JSON.stringify(result).length;                    // what the phone has to parse after unpacking
+  if (rawLen > MAX_RESULT_BYTES) {
+    await store.put(P(id, 'status.json'), { ...status, state: 'failed', updatedAt: finished, message: 'The result is too big for the phone to open (over 80 MB). Send fewer symbols or a shorter date range.' }); return { state: 'failed' };
   }
+  if (packed) result = gzPack(result);
   await store.put(P(id, 'result.json'), { v: 1, mode: job.mode, finishedAt: finished, elapsedMs: finished - (status.startedAt || finished), result });
   await store.put(P(id, 'status.json'), { ...status, state: 'done', updatedAt: finished, message: '' });
   return { state: 'done' };

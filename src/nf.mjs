@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 // JSON cannot hold NaN, Infinity or -Infinity (they turn into null). Results of Scan / Explore / Backtest can contain them (an exploration column
 // without a value, a profit factor with no losing trade), so they are written as { "__nf": "NaN" } and put back by the app (js/json-nan.js, same code).
 export function nfEncode(v) {
@@ -17,3 +18,13 @@ export function nfDecode(v) {
   }
   return v;
 }
+
+// Big results are stored compressed: { gz: <base64 of gzip of the JSON>, raw: <bytes before compression> }. JSON of rows compresses ~10x, so the repo
+// stays small and the phone downloads little. The app (js/json-nan.js, gzUnpack) opens both forms.
+export const PACK_MIN = 200000;
+export function gzPack(enc) {
+  const text = JSON.stringify(enc);
+  if (text.length < PACK_MIN) return enc;
+  return { gz: zlib.gzipSync(text, { level: 6 }).toString('base64'), raw: text.length };
+}
+export function gzUnpack(x) { return x && typeof x.gz === 'string' ? JSON.parse(zlib.gunzipSync(Buffer.from(x.gz, 'base64')).toString('utf8')) : x; }
