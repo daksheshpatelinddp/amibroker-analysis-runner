@@ -1,4 +1,6 @@
-# One analysis job (Optimize or Walk-Forward) split over several machines. Started by the app (workflow_dispatch with the job id).
+# One analysis job (Optimize, Walk-Forward, Scan, Explore or Backtest) split over several machines. Started by the app (workflow_dispatch with the job id).
+# Optimize / Walk-Forward: the combinations are shared out. Scan / Explore: the symbols are shared out (one machine per 100 symbols at most).
+# Backtest: one machine (a portfolio backtest needs all symbols together).
 # A run lasts at most about 6 hours; a job that needs longer saves its progress and the last step starts the next run by itself.
 # Market data: downloaded ONCE per data version (R2, or a GitHub Release when the variable DATA_RELEASE_URL is set) and kept in the
 # Actions cache. All machines read that copy, so the data host gets a handful of requests per run, not thousands.
