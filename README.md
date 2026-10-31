@@ -30,7 +30,7 @@ Results come back as `jobs/<id>/result.json`.
 - GitHub's terms restrict Actions to project-related use and forbid using it as a general compute service. Optimizing strategies for a
   project in the same account is a grey area; heavy use could get the repo's Actions limited. Use at your own risk.
 - Intraday time frames and `Study()` drawings are not available on the runner. Breadth data saved only on your phone (ADLine, TRIN ...) is not available there either.
-- Scan / Explore: `StockNum` counts inside each machine's share. Explore keeps the first 100,000 rows. A result must stay under 60 MB (it is stored in the repo).
+- Scan / Explore: `StockNum` counts inside each machine's share. Explore keeps the first 60,000 rows in your formula's sort order (the summary rows still count ALL rows). Results are stored compressed (60,000 rows is about 3 MB); a result must stay under 60 MB.
 - Free machines have ~7 GB RAM; a very large symbol list with long history may run out of memory: send fewer symbols or use more machines.
 - Anything in `jobs/` is stored in the repo: formula code and results. Keep the repo private if the formula is secret.
 - To cancel a job: Open on GitHub → Actions → the run → Cancel. Delete old `jobs/<id>` folders to save space.
