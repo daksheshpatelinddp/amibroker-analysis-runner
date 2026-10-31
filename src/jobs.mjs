@@ -9,7 +9,7 @@ const MAX_RUNS = 30;                       // a job continues itself across runs
 const MODES = ['optimize', 'walk', 'scan', 'explore', 'backtest'];
 const SPLIT = new Set(['scan', 'explore']);          // one symbol is independent of the others: the symbols are shared out over the machines
 const MAX_RESULT_BYTES = 80e6;                        // the result as JSON text: the phone has to parse it (a bigger one could crash the tab)
-const MAX_EXPLORE_ROWS = 20000;                       // rows of the sorted exploration table that are kept in the result (the summary rows cover ALL rows)
+const MAX_EXPLORE_ROWS = 60000;                       // rows of the sorted exploration table that are kept in the result (the summary rows cover ALL rows)
 const KEEP_XY_POINTS = 20000;
 const SHARD_EXPLORE_ROWS = 200000;                    // rows one machine collects before the join (memory)
 const minPerShard = () => Number(process.env.MIN_PER_SHARD) || 100;   // a machine needs ~1-2 minutes to start: not worth it for fewer symbols
