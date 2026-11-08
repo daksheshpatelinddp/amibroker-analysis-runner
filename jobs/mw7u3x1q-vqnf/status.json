@@ -1,1 +1,1 @@
-{"state":"running","shards":1,"mode":"explore","run":1,"startedAt":1794142524399,"stalls":0,"updatedAt":1794142524399,"message":""}
+{"state":"failed","shards":1,"mode":"explore","run":1,"startedAt":1794142524399,"stalls":0,"updatedAt":1794142642309,"message":"The result is too big for the phone to open (over 80 MB). Send fewer symbols or a shorter date range."}
