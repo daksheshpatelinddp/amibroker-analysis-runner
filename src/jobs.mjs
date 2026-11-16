@@ -42,7 +42,7 @@ export async function planJob(store, id) {
   return { shards: Array.from({ length: job.shards }, (_, i) => i), job };
 }
 
-const SESSION = (engine, loader, job) => engine.core.makeSession(loader.loadBars, job.interval || 'D');
+const SESSION = (engine, loader, job) => engine.core.makeSession(loader.loadBars, job.interval || 'D', () => { const g = job.settings && job.settings.general; return g && g.padAlign ? g.padRef : ''; });   /* same 'Pad and align to reference symbol' as the app */
 
 /** One shard. opts: { deadlineMs (stop and save before the runner's time limit), checkpointMs, progressMs } */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
